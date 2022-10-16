@@ -24,35 +24,35 @@ pipeline{
 
 
     stages {
-    stage('Git Checkout') {
-      steps {
-        checkout scm
-      }
-      steps {
-            sh 'cd vote'
-            sh 'ls -l'
-            sh 'docker build -t 792294754332.dkr.ecr.us-east-1.amazonaws.com/vote:${BUILD_NUMBER} .'
-            sh 'aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 792294754332.dkr.ecr.us-east-1.amazonaws.com'
-            sh 'docker push 792294754332.dkr.ecr.us-east-1.amazonaws.com/vote:${BUILD_NUMBER}'
-          }
-    }
-
-    stage('Build Docker Image') {
-      parallel {
-        stage('Build Docker Image') {
-          steps {
-            sh 'echo parallel stage'
-          }
+        stage('Git Checkout') {
+            steps {
+                checkout scm
+            }
+            steps {
+                sh 'cd vote'
+                sh 'ls -l'
+                sh 'docker build -t 792294754332.dkr.ecr.us-east-1.amazonaws.com/vote:${BUILD_NUMBER} .'
+                sh 'aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 792294754332.dkr.ecr.us-east-1.amazonaws.com'
+                sh 'docker push 792294754332.dkr.ecr.us-east-1.amazonaws.com/vote:${BUILD_NUMBER}'
+            }
         }
+
+        stage('Build Docker Image') {
+            parallel {
+                stage('Build Docker Image') {
+                    steps {
+                        sh 'echo parallel stage'
+                    }
+                }
 
         stage('Unit Testing') {
-          steps {
-            sh 'echo Run the Test Cases'
-          }
+            steps {
+                sh 'echo Run the Test Cases'
+            }
         }
 
-      }
-    }
+        }
+        }
 
     stage('Deploy in ECS') {
       steps {
