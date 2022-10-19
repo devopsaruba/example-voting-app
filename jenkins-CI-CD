@@ -1,0 +1,86 @@
+pipeline{
+    agent {label 'worker'}
+    options{
+        buildDiscarder(logRotator(daysToKeepStr: '7'))
+        disableConcurrentBuilds()
+        timeout(time: 10, unit : 'MINUTES')
+        retry(3)
+    }
+    parameters{
+        string(name: 'BRANCH', defaultValue: 'master')
+        booleanParam(name: 'Demo', defaultValue: false )
+        choice(name: 'OPERATION', choices: ['A', 'S', 'M', 'D'])
+    }
+    triggers{
+        cron('H */4 * * *')
+        pollSCM('H */4 * * *')
+    }
+    tools{
+        maven 'maven3.8'
+    }
+    environment{
+        ECS_CLUSTER  = "VOTE"
+    }
+
+    stages {
+        stage('Git Checkout') {
+        steps {
+            checkout scm
+        }
+    }
+
+        stage('Build Docker Image') {
+            parallel {
+                stage('Build Docker Image') {
+                steps {
+                    sh 'cd vote && docker build -t 792294754332.dkr.ecr.us-east-1.amazonaws.com/vote:${BUILD_NUMBER} .'
+                    sh 'aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 792294754332.dkr.ecr.us-east-1.amazonaws.com'
+                    sh 'docker push 792294754332.dkr.ecr.us-east-1.amazonaws.com/vote:${BUILD_NUMBER}'
+                }
+            }
+
+                stage('Unit Testing') {
+                    steps {
+                         sh 'echo Run the Test Cases'
+                    }
+                }
+            stage('Deploy in ECS') {
+                steps {
+                script {
+                    sh 'ECR_IMAGE=792294754332.dkr.ecr.us-east-1.amazonaws.com/vote:${BUILD_NUMBER}'
+                    sh 'TASK_DEFINITION=$(aws ecs describe-task-definition --task-definition "$TASK_FAMILY" --region "$AWS_DEFAULT_REGION")'
+                    sh 'NEW_TASK_DEFINTIION=$(echo $TASK_DEFINITION | jq --arg IMAGE "$ECR_IMAGE" '.taskDefinition | .containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')'
+                    sh 'NEW_TASK_INFO=$(aws ecs register-task-definition --region "$AWS_DEFAULT_REGION" --cli-input-json "$NEW_TASK_DEFINTIION")'
+                    sh 'NEW_REVISION=$(echo $NEW_TASK_INFO | jq '.taskDefinition.revision')'
+                    sh 'aws ecs update-service --cluster ${ECS_CLUSTER} \
+                        --service ${SERVICE_NAME} \
+                        --task-definition ${TASK_FAMILY}:${NEW_REVISION}'
+                        }
+
+                    }
+                }
+
+            }
+        }
+
+    }
+}
+environment {
+    AWS_DEFAULT_REGION = 'us-east-1'
+    SERVICE_NAME = 'vote'
+    TASK_FAMILY = 'vote-fargate-v1'
+    ECS_CLUSTER = 'vote-application'
+  }
+  post {
+    always {
+      deleteDir()
+      sh 'sudo docker rmi 635145294553.dkr.ecr.us-east-1.amazonaws.com/vote:${BUILD_NUMBER}'
+    }
+
+  }
+  options {
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+    disableConcurrentBuilds()
+    timeout(time: 1, unit: 'HOURS')
+  }
+}
