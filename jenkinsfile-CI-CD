@@ -4,7 +4,7 @@ pipeline{
         buildDiscarder(logRotator(daysToKeepStr: '7'))
         disableConcurrentBuilds()
         timeout(time: 10, unit : 'MINUTES')
-        #retry(3)
+    
     }
     parameters{
         string(name: 'BRANCH', defaultValue: 'master')
